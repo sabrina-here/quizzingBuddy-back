@@ -228,9 +228,7 @@ app.post("/saveTopic", authenticate, async (req, res) => {
 app.get("/getTopics", authenticate, async (req, res) => {
   try {
     const user_id = req.user.id; // Extract user ID from the token
-    console.log("hit the api");
     const userTopics = await Topic.findOne({ user_id });
-    console.log(userTopics);
 
     if (!userTopics) {
       return res.send({ message: "No topics found for this user." });
@@ -279,6 +277,79 @@ app.get("/getMyQuizzes", authenticate, async (req, res) => {
   } catch (error) {
     console.error("Error fetching quizzes:", error);
     res.status(500).json({ message: "Internal server error." });
+  }
+});
+
+//-------------------- update score of quiz after try again
+app.patch("/updateQuiz/:id", authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { score } = req.body;
+
+    const updatedQuiz = await Quiz.findByIdAndUpdate(
+      id,
+      { score },
+      { new: true } // Returns the updated document
+    );
+
+    if (!updatedQuiz) {
+      return res.send({ message: "Quiz not found" });
+    }
+
+    res.send({ message: "Quiz updated successfully", updatedQuiz });
+  } catch (error) {
+    console.error("Error updating quiz:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+//---------------- delete topic -----------
+app.delete("/deleteTopic", authenticate, async (req, res) => {
+  try {
+    const { topic } = req.body;
+    const userId = req.user.id; // Get user ID from the token
+
+    // 1️⃣ Remove the topic from the topics array
+    const updatedTopics = await Topic.findOneAndUpdate(
+      { userId },
+      { $pull: { topics: topic } }, // Removes the topic from the array
+      { new: true }
+    );
+
+    if (!updatedTopics) {
+      return res.send({ message: "User topics not found" });
+    }
+
+    // 2️⃣ Delete all quizzes of that topic for the user
+    await Quiz.deleteMany({ userId, topic });
+
+    res.send({ message: "Topic and related quizzes deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting topic and quizzes:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+//----------------- delete quiz --------
+app.delete("/deleteQuiz/:quizId", authenticate, async (req, res) => {
+  try {
+    const { quizId } = req.params;
+    console.log(quizId);
+    const qId = new mongoose.Types.ObjectId(quizId);
+    const userId = req.user.id; // Ensure the user can only delete their own quiz
+
+    const deletedQuiz = await Quiz.findOneAndDelete({ _id: qId, userId });
+
+    if (!deletedQuiz) {
+      return res
+        .status(404)
+        .json({ message: "Quiz not found or unauthorized" });
+    }
+
+    res.send({ message: "Quiz deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting quiz:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 });
 
