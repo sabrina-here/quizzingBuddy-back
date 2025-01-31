@@ -307,11 +307,11 @@ app.patch("/updateQuiz/:id", authenticate, async (req, res) => {
 app.delete("/deleteTopic", authenticate, async (req, res) => {
   try {
     const { topic } = req.body;
-    const userId = req.user.id; // Get user ID from the token
+    const user_id = req.user.id; // Get user ID from the token
 
     // 1️⃣ Remove the topic from the topics array
     const updatedTopics = await Topic.findOneAndUpdate(
-      { userId },
+      { user_id },
       { $pull: { topics: topic } }, // Removes the topic from the array
       { new: true }
     );
@@ -321,6 +321,7 @@ app.delete("/deleteTopic", authenticate, async (req, res) => {
     }
 
     // 2️⃣ Delete all quizzes of that topic for the user
+    const userId = user_id;
     await Quiz.deleteMany({ userId, topic });
 
     res.send({ message: "Topic and related quizzes deleted successfully" });
@@ -350,6 +351,63 @@ app.delete("/deleteQuiz/:quizId", authenticate, async (req, res) => {
   } catch (error) {
     console.error("Error deleting quiz:", error);
     res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+//--------------------------------------------------------------------
+
+app.get("/getUserTopicStats", authenticate, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Fetch user's topics
+    const userTopics = await Topic.findOne({ user_id: userId });
+
+    if (!userTopics) {
+      return res.send({ message: "No topics found for this user" });
+    }
+
+    // Fetch all quizzes of this user
+    const userQuizzes = await Quiz.find({ userId: userId });
+
+    // Process quizzes and aggregate data
+    const topicStats = userTopics.topics.map((topic) => {
+      const quizzesForTopic = userQuizzes.filter(
+        (quiz) => quiz.topic === topic
+      );
+
+      const totalScore = quizzesForTopic.reduce(
+        (sum, quiz) => sum + quiz.score,
+        0
+      );
+      const totalNumQuestions = quizzesForTopic.reduce(
+        (sum, quiz) => sum + quiz.numQuestions,
+        0
+      );
+      const totalQuizzes = quizzesForTopic.length;
+
+      const difficultyCounts = quizzesForTopic.reduce(
+        (acc, quiz) => {
+          if (quiz.difficulty === "easy") acc.difficulty_easy++;
+          if (quiz.difficulty === "medium") acc.difficulty_medium++;
+          if (quiz.difficulty === "hard") acc.difficulty_hard++;
+          return acc;
+        },
+        { difficulty_easy: 0, difficulty_medium: 0, difficulty_hard: 0 }
+      );
+
+      return {
+        topic,
+        score: totalScore,
+        numQuestions: totalNumQuestions,
+        total_quizzes: totalQuizzes,
+        ...difficultyCounts,
+      };
+    });
+    res.send(topicStats);
+  } catch (error) {
+    console.error("Error fetching topic statistics:", error);
+    res.status(500).json({ message: "Server error" });
   }
 });
 
