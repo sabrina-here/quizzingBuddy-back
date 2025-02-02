@@ -29,7 +29,7 @@ app.post("/api/generate-questions", async (req, res) => {
   }
 
   try {
-    const prompt = `Generate ${numQuestions} multiple-choice questions on the topic "${topic}" with difficulty level "${difficulty}". Provide the question answers in this exact JSON format, do not add any other text:
+    const prompt = `Generate ${numQuestions} ${difficulty} multiple-choice questions on "${topic}". Provide the question answers in this exact format, do not add any other text:
 
     [
       { "question": "What is 2 + 2?", "answers": ["4", "3", "5", "6"], "correct": "4" },
@@ -49,6 +49,7 @@ app.post("/api/generate-questions", async (req, res) => {
         top_p: 1,
         frequency_penalty: 0,
         presence_penalty: 0,
+        response_format: { type: "text" },
       },
       {
         headers: {
@@ -57,9 +58,7 @@ app.post("/api/generate-questions", async (req, res) => {
         },
       }
     );
-
     let content = response.data.choices[0].message.content;
-    console.log(content);
     res.send(content);
   } catch (error) {
     console.error(
