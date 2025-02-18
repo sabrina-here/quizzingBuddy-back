@@ -1,19 +1,13 @@
 const mongoose = require("mongoose");
 
-// Define the user schema
-// const userSchema = new mongoose.Schema({
-//   googleId: { type: String, required: true },
-//   displayName: { type: String, required: true },
-//   email: { type: String, required: true, unique: true },
-//   createdAt: { type: Date, default: Date.now },
-// });
-
 const quizSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   email: { type: String, required: true }, // User's email (required and unique)
   topic: { type: String, required: true },
   score: { type: Number, required: true },
   numQuestions: { type: Number, required: true }, // Changed to Number type
+  timer: { type: Number, required: true }, // Changed to Number type
+  penalty: { type: Number, required: true }, // Changed to Number type
   difficulty: { type: String, required: true },
   quiz: {
     type: [

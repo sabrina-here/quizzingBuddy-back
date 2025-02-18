@@ -159,13 +159,24 @@ const Quiz = require("./models/Quiz");
 
 app.post("/saveQuiz", authenticate, async (req, res) => {
   try {
-    const { email, topic, score, numQuestions, difficulty, quiz } = req.body;
+    const {
+      email,
+      topic,
+      timer,
+      score,
+      numQuestions,
+      difficulty,
+      quiz,
+      penalty,
+    } = req.body;
     const userId = req.user.id; // Retrieved from the token's payload
 
     const newQuiz = new Quiz({
       userId,
       email,
       topic,
+      timer,
+      penalty,
       score,
       numQuestions,
       difficulty,
@@ -283,11 +294,11 @@ app.get("/getMyQuizzes", authenticate, async (req, res) => {
 app.patch("/updateQuiz/:id", authenticate, async (req, res) => {
   try {
     const { id } = req.params;
-    const { score } = req.body;
+    const { score, penalty } = req.body;
 
     const updatedQuiz = await Quiz.findByIdAndUpdate(
       id,
-      { score },
+      { score, penalty },
       { new: true } // Returns the updated document
     );
 
