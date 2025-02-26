@@ -102,12 +102,13 @@ mongoose
 
 app.post("/register", async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, role, password } = req.body;
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const newUser = new User({
       name,
       email,
+      role,
       passwordHash: hashedPassword,
     });
     await newUser.save();
@@ -119,7 +120,13 @@ app.post("/register", async (req, res) => {
       }
     );
 
-    res.status(201).send({ message: "User registered successfully!", token });
+    res.status(201).send({
+      name: newUser.name,
+      email: newUser.email,
+      role: newUser.role,
+      id: newUser._id,
+      accessToken: token,
+    });
   } catch (error) {
     console.log(error);
     res.status(500).send("Error registering user.");
@@ -149,9 +156,39 @@ app.post("/login", async (req, res) => {
     );
 
     // res.status(200).json({ token });
-    res.send({ name: user.name, email: user.email, accessToken: token });
+    res.send({
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      id: user._id,
+      accessToken: token,
+    });
   } catch (error) {
     res.status(500).send("Error logging in.");
+  }
+});
+
+//--------- update user role
+app.patch("/updateUser/:id", authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { role } = req.body;
+    console.log(role);
+
+    const updatedUser = await User.findByIdAndUpdate(
+      id,
+      { role },
+      { new: true } // Returns the updated document
+    );
+
+    if (!updatedUser) {
+      return res.send({ message: "User not found" });
+    }
+
+    res.send({ message: "user role updated successfully", updatedUser });
+  } catch (error) {
+    console.error("Error updating user role:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 });
 
@@ -418,6 +455,186 @@ app.get("/getUserTopicStats", authenticate, async (req, res) => {
   } catch (error) {
     console.error("Error fetching topic statistics:", error);
     res.status(500).json({ message: "Server error" });
+  }
+});
+
+//---------------------------- topic preference --------------
+const TopicPreference = require("./models/TopicPreference");
+
+// POST route to save topic preferences
+app.post("/preferredTopics", authenticate, async (req, res) => {
+  try {
+    const { userId, email, preferredTopic } = req.body;
+
+    if (!userId || !email || !preferredTopic) {
+      return res.status(400).json({ message: "Invalid data format" });
+    }
+
+    // Check if user already has preferences
+    let existingPreference = await TopicPreference.findOne({ userId });
+
+    if (existingPreference) {
+      // Append new topic if it doesn't already exist
+      if (!existingPreference.preferredTopics.includes(preferredTopic)) {
+        existingPreference.preferredTopics.push(preferredTopic);
+        await existingPreference.save();
+        return res
+          .status(200)
+          .json({ message: "Preferences updated", data: existingPreference });
+      } else {
+        return res
+          .status(200)
+          .json({ message: "Topic already exists", data: existingPreference });
+      }
+    }
+
+    // If no existing preference, create a new one
+    const newPreference = new TopicPreference({
+      userId,
+      email,
+      preferredTopics: [preferredTopic], // Store it as an array
+    });
+
+    await newPreference.save();
+
+    res.status(201).json({ message: "Preferences saved", data: newPreference });
+  } catch (error) {
+    console.error("Error saving topic preferences:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// GET user preferences by userId
+app.get("/preferredTopics/:userId", authenticate, async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const preferences = await TopicPreference.findOne({ userId });
+
+    if (!preferences) {
+      return res
+        .status(404)
+        .json({ message: "No preferences found for this user" });
+    }
+
+    res.send({ message: "Preferences retrieved", data: preferences });
+  } catch (error) {
+    console.error("Error fetching preferences:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// DELETE user preferences by userId
+app.delete("/preferredTopics/:userId", authenticate, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { preferredTopic } = req.body; // Get the topic to be removed from request body
+
+    if (!preferredTopic) {
+      return res.status(400).json({ message: "Preferred topic is required" });
+    }
+
+    // Find the document and update the array by pulling out the specific topic
+    const updatedPreference = await TopicPreference.findOneAndUpdate(
+      { userId },
+      { $pull: { preferredTopics: preferredTopic } }, // Removes only the matching topic
+      { new: true } // Returns the updated document
+    );
+
+    if (!updatedPreference) {
+      return res
+        .status(404)
+        .json({ message: "No preferences found to update" });
+    }
+
+    res.status(200).json({
+      message: "Preferred topic removed successfully",
+      data: updatedPreference,
+    });
+  } catch (error) {
+    console.error("Error deleting preferred topic:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+//-----------------------------------------------------------------
+
+// GET user quiz stats
+app.get("/stats/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    // Fetch all quizzes of the user
+    const quizzes = await Quiz.find({ userId });
+
+    if (!quizzes.length) {
+      return res.send({ message: "No quizzes found for this user" });
+    }
+
+    // Initialize counters
+    let totalQuizzes = quizzes.length;
+    let easyQuizzes = 0,
+      mediumQuizzes = 0,
+      hardQuizzes = 0;
+    let totalScore = 0,
+      totalQuestions = 0;
+    let easyScore = 0,
+      mediumScore = 0,
+      hardScore = 0;
+    let easyQuestions = 0,
+      mediumQuestions = 0,
+      hardQuestions = 0;
+
+    // Process each quiz
+    quizzes.forEach((quiz) => {
+      totalScore += quiz.score;
+      totalQuestions += quiz.numQuestions;
+
+      // Categorize by difficulty
+      if (quiz.difficulty === "easy") {
+        easyQuizzes++;
+        easyScore += quiz.score;
+        easyQuestions += quiz.numQuestions;
+      } else if (quiz.difficulty === "medium") {
+        mediumQuizzes++;
+        mediumScore += quiz.score;
+        mediumQuestions += quiz.numQuestions;
+      } else if (quiz.difficulty === "hard") {
+        hardQuizzes++;
+        hardScore += quiz.score;
+        hardQuestions += quiz.numQuestions;
+      }
+    });
+
+    // Calculate percentages (handling division by zero)
+    const avgMarks = totalQuestions
+      ? ((totalScore / totalQuestions) * 100).toFixed(2)
+      : 0;
+    const easyMarks = easyQuestions
+      ? ((easyScore / easyQuestions) * 100).toFixed(2)
+      : 0;
+    const mediumMarks = mediumQuestions
+      ? ((mediumScore / mediumQuestions) * 100).toFixed(2)
+      : 0;
+    const hardMarks = hardQuestions
+      ? ((hardScore / hardQuestions) * 100).toFixed(2)
+      : 0;
+
+    // Send response
+    res.send({
+      totalQuizzes,
+      easyQuizzes,
+      mediumQuizzes,
+      hardQuizzes,
+      avgMarks: `${avgMarks}`,
+      easyMarks: `${easyMarks}`,
+      mediumMarks: `${mediumMarks}`,
+      hardMarks: `${hardMarks}`,
+      // quizzes,
+    });
+  } catch (error) {
+    console.error("Error fetching quiz stats:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 });
 
