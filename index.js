@@ -173,7 +173,6 @@ app.patch("/updateUser/:id", authenticate, async (req, res) => {
   try {
     const { id } = req.params;
     const { role } = req.body;
-    console.log(role);
 
     const updatedUser = await User.findByIdAndUpdate(
       id,
@@ -382,7 +381,6 @@ app.delete("/deleteTopic", authenticate, async (req, res) => {
 app.delete("/deleteQuiz/:quizId", authenticate, async (req, res) => {
   try {
     const { quizId } = req.params;
-    console.log(quizId);
     const qId = new mongoose.Types.ObjectId(quizId);
     const userId = req.user.id; // Ensure the user can only delete their own quiz
 
